@@ -1,0 +1,476 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="h3 mb-4">
+            <i class="fas fa-cog me-2"></i>System Settings
+        </h1>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Device Management -->
+    <div class="col-lg-8">
+        <div class="card shadow mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-microchip me-2"></i>Device Management
+                </h5>
+                <a href="{{ url_for('add_device') }}" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus me-1"></i>Add Device
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Device ID</th>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Location</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for device in devices %}
+                            <tr id="device-{{ device.id }}">
+                                <td>
+                                    <code>{{ device.device_id }}</code>
+                                </td>
+                                <td>{{ device.device_name }}</td>
+                                <td>
+                                    <span class="badge bg-info">{{ device.device_type }}</span>
+                                </td>
+                                <td>{{ device.location or '-' }}</td>
+                                <td>
+                                    {% if device.status == 'active' %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ device.created_at.strftime('%Y-%m-%d') }}</td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-primary" onclick="editDevice({{ device.id }}, '{{ device.device_name }}', '{{ device.location or '' }}', '{{ device.status }}')" title="Edit Device">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-outline-danger" onclick="deleteDevice({{ device.id }}, '{{ device.device_id }}')" title="Delete Device">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    No devices registered yet. 
+                                    <a href="{{ url_for('add_device') }}">Add your first device</a>.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Information -->
+    <div class="col-lg-4">
+        <div class="card shadow mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle me-2"></i>System Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-0">
+                    <div class="col-sm-6">
+                        <div class="text-center mb-3">
+                            <div class="h4 mb-1" id="total-devices">{{ devices|length }}</div>
+                            <div class="text-muted small">Total Devices</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-center mb-3">
+                            <div class="h4 mb-1" id="active-devices">{{ devices|selectattr('status', 'equalto', 'active')|list|length }}</div>
+                            <div class="text-muted small">Active Devices</div>
+                        </div>
+                    </div>
+                </div>
+                <hr>
+                <div class="small">
+                    <div class="row mb-2">
+                        <div class="col-6">Database:</div>
+                        <div class="col-6"><span class="badge bg-success">Connected</span></div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-6">API Status:</div>
+                        <div class="col-6"><span class="badge bg-success">Online</span></div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-6">Version:</div>
+                        <div class="col-6">v1.0.0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- API Information -->
+        <div class="card shadow mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-plug me-2"></i>API Endpoints
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="small">
+                    <div class="mb-2">
+                        <strong>POST</strong> <code>/api/sensor-data</code>
+                        <div class="text-muted">Send sensor data from IoT devices</div>
+                    </div>
+                    <div class="mb-2">
+                        <strong>GET</strong> <code>/api/sensor-data</code>
+                        <div class="text-muted">Retrieve sensor data</div>
+                    </div>
+                    <div class="mb-2">
+                        <strong>GET</strong> <code>/api/devices</code>
+                        <div class="text-muted">Get device list</div>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-outline-primary btn-sm" onclick="testAPI()">
+                        <i class="fas fa-play me-1"></i>Test API
+                    </button>
+                    <button class="btn btn-outline-info btn-sm" onclick="showAPIDoc()">
+                        <i class="fas fa-book me-1"></i>API Docs
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Database Settings -->
+        <div class="card shadow">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-database me-2"></i>Database Settings
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <button class="btn btn-warning btn-sm" onclick="clearOldData()">
+                        <i class="fas fa-broom me-1"></i>Clear Old Data
+                    </button>
+                    <div class="form-text">Remove data older than 30 days</div>
+                </div>
+                <div class="mb-3">
+                    <button class="btn btn-info btn-sm" onclick="exportData()">
+                        <i class="fas fa-download me-1"></i>Export Data
+                    </button>
+                    <div class="form-text">Download data as CSV</div>
+                </div>
+                <div class="mb-0">
+                    <button class="btn btn-danger btn-sm" onclick="resetDatabase()">
+                        <i class="fas fa-exclamation-triangle me-1"></i>Reset Database
+                    </button>
+                    <div class="form-text">⚠️ This will delete all data!</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Device Modal -->
+<div class="modal fade" id="editDeviceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Device</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editDeviceForm">
+                    <div class="mb-3">
+                        <label for="edit_device_name" class="form-label">Device Name</label>
+                        <input type="text" class="form-control" id="edit_device_name" name="device_name" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_location" class="form-label">Location</label>
+                        <input type="text" class="form-control" id="edit_location" name="location" placeholder="e.g., Living Room, Office">
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_status" class="form-label">Status</label>
+                        <select class="form-select" id="edit_status" name="status">
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="updateDevice()">Update Device</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentEditingDeviceId = null;
+
+function editDevice(deviceId, deviceName, location, status) {
+    currentEditingDeviceId = deviceId;
+    
+    // Populate the modal form with current device data
+    document.getElementById('edit_device_name').value = deviceName;
+    document.getElementById('edit_location').value = location || '';
+    document.getElementById('edit_status').value = status;
+    
+    // Show the modal
+    const modal = new bootstrap.Modal(document.getElementById('editDeviceModal'));
+    modal.show();
+}
+
+function updateDevice() {
+    if (!currentEditingDeviceId) {
+        showAlert('Error: No device selected for editing', 'danger');
+        return;
+    }
+    
+    const deviceName = document.getElementById('edit_device_name').value.trim();
+    const location = document.getElementById('edit_location').value.trim();
+    const status = document.getElementById('edit_status').value;
+    
+    if (!deviceName) {
+        showAlert('Device name is required', 'warning');
+        return;
+    }
+    
+    const updateData = {
+        device_name: deviceName,
+        location: location,
+        status: status
+    };
+    
+    // Show loading state
+    const updateButton = event.target;
+    const originalText = updateButton.innerHTML;
+    updateButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Updating...';
+    updateButton.disabled = true;
+    
+    fetch(`/api/devices/${currentEditingDeviceId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        updateButton.innerHTML = originalText;
+        updateButton.disabled = false;
+        
+        if (data.status === 'success') {
+            // Close the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('editDeviceModal'));
+            modal.hide();
+            
+            // Show success message
+            showAlert('Device updated successfully!', 'success');
+            
+            // Refresh the page to show updated data
+            setTimeout(() => {
+                location.reload();
+            }, 1500);
+        } else {
+            showAlert(data.message || 'Failed to update device', 'danger');
+        }
+    })
+    .catch(error => {
+        updateButton.innerHTML = originalText;
+        updateButton.disabled = false;
+        console.error('Error:', error);
+        showAlert('Error updating device: ' + error.message, 'danger');
+    });
+}
+
+function deleteDevice(deviceId, deviceIdStr) {
+    // Show confirmation dialog with device info
+    const confirmMessage = `Are you sure you want to delete device "${deviceIdStr}"?\n\n` +
+                          `This will permanently remove:\n` +
+                          `• The device record\n` +
+                          `• All sensor data from this device\n\n` +
+                          `This action cannot be undone.`;
+    
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    // Show loading indicator
+    const deviceRow = document.getElementById(`device-${deviceId}`);
+    const originalHtml = deviceRow.innerHTML;
+    const loadingHtml = `
+        <td colspan="7" class="text-center py-3">
+            <span class="spinner-border spinner-border-sm me-2"></span>
+            Deleting device and all related data...
+        </td>
+    `;
+    deviceRow.innerHTML = loadingHtml;
+    
+    fetch(`/api/devices/${deviceId}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            // Animate row removal
+            deviceRow.style.transition = 'opacity 0.3s ease';
+            deviceRow.style.opacity = '0';
+            
+            setTimeout(() => {
+                deviceRow.remove();
+                updateDeviceCounts();
+            }, 300);
+            
+            showAlert('Device and all related data deleted successfully!', 'success');
+        } else {
+            // Restore original content on error
+            deviceRow.innerHTML = originalHtml;
+            showAlert(data.message || 'Failed to delete device', 'danger');
+        }
+    })
+    .catch(error => {
+        // Restore original content on error
+        deviceRow.innerHTML = originalHtml;
+        console.error('Error:', error);
+        showAlert('Error deleting device: ' + error.message, 'danger');
+    });
+}
+
+function updateDeviceCounts() {
+    // Update the device count statistics
+    const remainingRows = document.querySelectorAll('#device-table tbody tr:not(.no-devices)').length;
+    
+    const totalDevicesElement = document.getElementById('total-devices');
+    const activeDevicesElement = document.getElementById('active-devices');
+    
+    if (totalDevicesElement) {
+        totalDevicesElement.textContent = remainingRows;
+    }
+    
+    if (remainingRows === 0) {
+        // Show "no devices" message
+        const tbody = document.querySelector('#device-table tbody');
+        tbody.innerHTML = `
+            <tr class="no-devices">
+                <td colspan="7" class="text-center text-muted py-4">
+                    No devices registered yet. 
+                    <a href="/devices/add">Add your first device</a>.
+                </td>
+            </tr>
+        `;
+        
+        if (activeDevicesElement) {
+            activeDevicesElement.textContent = '0';
+        }
+    } else {
+        // Count active devices
+        const activeCount = document.querySelectorAll('.badge.bg-success').length;
+        if (activeDevicesElement) {
+            activeDevicesElement.textContent = activeCount;
+        }
+    }
+}
+
+function showAlert(message, type) {
+    // Create and show bootstrap alert
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px; max-width: 500px;';
+    alertDiv.innerHTML = `
+        <strong>${type === 'success' ? 'Success!' : type === 'danger' ? 'Error!' : 'Notice!'}</strong> ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
+
+function testAPI() {
+    fetch('/api/sensor-data?limit=1')
+        .then(response => response.json())
+        .then(data => {
+            showAlert('API Test Successful! Latest data retrieved.', 'success');
+        })
+        .catch(error => {
+            showAlert('API Test Failed: ' + error.message, 'danger');
+        });
+}
+
+function showAPIDoc() {
+    const apiDoc = `
+API Documentation
+
+Device Management:
+• GET  /api/devices - List all devices
+• PUT  /api/devices/{id} - Update device
+• DELETE /api/devices/{id} - Delete device
+
+Sensor Data:
+• POST /api/sensor-data - Submit sensor data
+  {
+    "device_id": "ESP32_001",
+    "temperature": 25.5,
+    "humidity": 60.0,
+    "pressure": 1013.25,
+    "light": 500.0,
+    "motion": false
+  }
+
+• GET /api/sensor-data?device_id=ESP32_001&limit=50 - Retrieve data
+`;
+    
+    alert(apiDoc);
+}
+
+function clearOldData() {
+    if (confirm('This will delete sensor data older than 30 days. Continue?')) {
+        showAlert('Old data cleanup feature coming soon!', 'info');
+    }
+}
+
+function exportData() {
+    showAlert('Data export started. Feature in development...', 'info');
+}
+
+function resetDatabase() {
+    if (confirm('⚠️ WARNING: This will delete ALL data including devices and sensor readings. This action cannot be undone. Are you absolutely sure?')) {
+        if (confirm('This is your final warning. All data will be permanently deleted. Continue?')) {
+            showAlert('Database reset feature requires admin privileges. Contact system administrator.', 'warning');
+        }
+    }
+}
+
+// Add table ID for easier reference
+document.addEventListener('DOMContentLoaded', function() {
+    const table = document.querySelector('.table');
+    if (table) {
+        table.id = 'device-table';
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="h3 mb-3">
+            <i class="fas fa-tachometer-alt me-2"></i>Real-time IoT Dashboard
+        </h1>
+    </div>
+</div>
+
+<!-- Status Cards -->
+<div class="row mb-4">
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-primary shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                            Active Devices
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="active-devices">
+                            {{ devices|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-microchip fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-success shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                            Temperature
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="avg-temperature">
+                            --°C
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-thermometer-half fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-info shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                            Humidity
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="avg-humidity">
+                            --%
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-tint fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-warning shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                            Data Points
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="data-count">
+                            {{ sensor_data|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-chart-area fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row mb-4">
+    <div class="col-xl-8 col-lg-7">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <h6 class="m-0 font-weight-bold text-primary">Temperature & Humidity Trends</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="temperatureChart" width="100" height="40"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4 col-lg-5">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Device Status</h6>
+            </div>
+            <div class="card-body">
+                <canvas id="deviceChart" width="100" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Data Table -->
+<div class="card shadow mb-4">
+    <div class="card-header py-3">
+        <h6 class="m-0 font-weight-bold text-primary">Recent Sensor Readings</h6>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
+                <thead>
+                    <tr>
+                        <th>Device</th>
+                        <th>Temperature (°C)</th>
+                        <th>Humidity (%)</th>
+                        <th>Pressure (hPa)</th>
+                        <th>Light</th>
+                        <th>Motion</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody id="sensor-data-tbody">
+                    {% for data in sensor_data %}
+                    <tr>
+                        <td>{{ data.device_id }}</td>
+                        <td>{{ data.temperature or '--' }}</td>
+                        <td>{{ data.humidity or '--' }}</td>
+                        <td>{{ data.pressure or '--' }}</td>
+                        <td>{{ data.light or '--' }}</td>
+                        <td>
+                            {% if data.motion %}
+                                <span class="badge bg-warning">Detected</span>
+                            {% else %}
+                                <span class="badge bg-success">None</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ data.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Real-time data update
+function updateDashboard() {
+    fetch('/api/sensor-data?limit=20')
+        .then(response => response.json())
+        .then(data => {
+            updateCharts(data);
+            updateTable(data);
+            updateStats(data);
+        })
+        .catch(error => console.error('Error:', error));
+}
+
+// Update charts with new data
+function updateCharts(data) {
+    const temperatures = data.map(d => d.temperature).filter(t => t !== null);
+    const humidities = data.map(d => d.humidity).filter(h => h !== null);
+    const labels = data.map(d => new Date(d.timestamp).toLocaleTimeString()).slice(0, 10);
+    
+    // Update temperature chart
+    if (window.temperatureChart) {
+        window.temperatureChart.data.labels = labels;
+        window.temperatureChart.data.datasets[0].data = temperatures.slice(0, 10);
+        window.temperatureChart.data.datasets[1].data = humidities.slice(0, 10);
+        window.temperatureChart.update();
+    }
+}
+
+// Update statistics cards
+function updateStats(data) {
+    const temperatures = data.map(d => d.temperature).filter(t => t !== null);
+    const humidities = data.map(d => d.humidity).filter(h => h !== null);
+    
+    if (temperatures.length > 0) {
+        const avgTemp = temperatures.reduce((a, b) => a + b, 0) / temperatures.length;
+        document.getElementById('avg-temperature').textContent = avgTemp.toFixed(1) + '°C';
+    }
+    
+    if (humidities.length > 0) {
+        const avgHumidity = humidities.reduce((a, b) => a + b, 0) / humidities.length;
+        document.getElementById('avg-humidity').textContent = avgHumidity.toFixed(1) + '%';
+    }
+    
+    document.getElementById('data-count').textContent = data.length;
+}
+
+// Initialize charts
+document.addEventListener('DOMContentLoaded', function() {
+    // Temperature Chart
+    const ctx = document.getElementById('temperatureChart').getContext('2d');
+    window.temperatureChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Temperature (°C)',
+                data: [],
+                borderColor: 'rgb(75, 192, 192)',
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'Humidity (%)',
+                data: [],
+                borderColor: 'rgb(255, 99, 132)',
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Device Status Chart
+    const deviceCtx = document.getElementById('deviceChart').getContext('2d');
+    window.deviceChart = new Chart(deviceCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['ESP32', 'PICO WH', 'Other'],
+            datasets: [{
+                data: [{{ devices|selectattr('device_type', 'equalto', 'ESP32')|list|length }}, 
+                       {{ devices|selectattr('device_type', 'equalto', 'PICO WH')|list|length }}, 
+                       {{ devices|length - (devices|selectattr('device_type', 'equalto', 'ESP32')|list|length + devices|selectattr('device_type', 'equalto', 'PICO WH')|list|length) }}],
+                backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+
+    // Initial load
+    updateDashboard();
+    
+    // Update every 5 seconds
+    setInterval(updateDashboard, 5001);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,248 @@
+from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+import json
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+lo        print(f"❌ Failed to connect to remote MySQL database: {e}")
+        print("🔧 Please verify MySQL connection details:")
+        print(f"   Host: {DB_HOST}")
+        print(f"   Port: {DB_PORT}")
+        print(f"   User: {DB_USER}")
+        print(f"   Database: {DB_NAME}")
+        print("💡 Application requires remote MySQL database - no local fallback available")nv()
+
+app = Flask(__name__)
+
+# Database Configuration - ONLY MySQL (Remote Database)
+DB_HOST = os.getenv('DB_HOST', '61.19.114.86')
+DB_PORT = os.getenv('DB_PORT', '54000')
+DB_USER = os.getenv('DB_USER', 'nathee')
+DB_PASSWORD = os.getenv('DB_PASSWORD', 'Root@1234')
+DB_NAME = os.getenv('DB_NAME', 'iot_data')
+
+# Properly escape the password in the connection string
+from urllib.parse import quote_plus
+escaped_password = quote_plus(DB_PASSWORD)
+
+# Force MySQL connection only - no local database fallback
+app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{DB_USER}:{escaped_password}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-key-change-in-production')
+
+db = SQLAlchemy(app)
+
+# Database Models
+class Device(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    device_id = db.Column(db.String(50), unique=True, nullable=False)
+    device_name = db.Column(db.String(100), nullable=False)
+    device_type = db.Column(db.String(50), nullable=False)  # ESP32, PICO WH, etc.
+    location = db.Column(db.String(100))
+    status = db.Column(db.String(20), default='active')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'device_id': self.device_id,
+            'device_name': self.device_name,
+            'device_type': self.device_type,
+            'location': self.location,
+            'status': self.status,
+            'created_at': self.created_at.isoformat()
+        }
+
+class SensorData(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    device_id = db.Column(db.String(50), nullable=False)
+    temperature = db.Column(db.Float)
+    humidity = db.Column(db.Float)
+    pressure = db.Column(db.Float)
+    light = db.Column(db.Float)
+    motion = db.Column(db.Boolean)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'device_id': self.device_id,
+            'temperature': self.temperature,
+            'humidity': self.humidity,
+            'pressure': self.pressure,
+            'light': self.light,
+            'motion': self.motion,
+            'timestamp': self.timestamp.isoformat()
+        }
+
+# Routes
+@app.route('/')
+def index():
+    return redirect(url_for('dashboard'))
+
+@app.route('/dashboard')
+def dashboard():
+    # Get latest sensor data for dashboard
+    latest_data = db.session.query(SensorData).order_by(SensorData.timestamp.desc()).limit(10).all()
+    devices = Device.query.filter_by(status='active').all()
+    return render_template('dashboard.html', sensor_data=latest_data, devices=devices)
+
+@app.route('/devices/add')
+def add_device():
+    return render_template('add_device.html')
+
+@app.route('/devices', methods=['POST'])
+def create_device():
+    data = request.json
+    device = Device(
+        device_id=data['device_id'],
+        device_name=data['device_name'],
+        device_type=data['device_type'],
+        location=data.get('location', '')
+    )
+    db.session.add(device)
+    db.session.commit()
+    return jsonify({'status': 'success', 'message': 'Device added successfully'})
+
+@app.route('/setting')
+def settings():
+    devices = Device.query.all()
+    return render_template('settings.html', devices=devices)
+
+# API Endpoints for IoT devices
+@app.route('/api/sensor-data', methods=['POST'])
+def receive_sensor_data():
+    """Endpoint for IoT devices to send sensor data"""
+    try:
+        data = request.json
+        sensor_data = SensorData(
+            device_id=data['device_id'],
+            temperature=data.get('temperature'),
+            humidity=data.get('humidity'),
+            pressure=data.get('pressure'),
+            light=data.get('light'),
+            motion=data.get('motion', False)
+        )
+        db.session.add(sensor_data)
+        db.session.commit()
+        return jsonify({'status': 'success', 'message': 'Data received'}), 200
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+
+@app.route('/api/sensor-data', methods=['GET'])
+def get_sensor_data():
+    """Get sensor data for dashboard updates"""
+    device_id = request.args.get('device_id')
+    limit = request.args.get('limit', 50)
+    
+    query = SensorData.query
+    if device_id:
+        query = query.filter_by(device_id=device_id)
+    
+    data = query.order_by(SensorData.timestamp.desc()).limit(limit).all()
+    return jsonify([item.to_dict() for item in data])
+
+@app.route('/api/devices', methods=['GET'])
+def get_devices():
+    """Get all devices"""
+    devices = Device.query.all()
+    return jsonify([device.to_dict() for device in devices])
+
+if __name__ == '__main__':
+    try:
+        # For MySQL, try to create the database if it doesn't exist
+        try:
+            import pymysql
+            from urllib.parse import quote_plus
+            
+            # Connect without specifying database to create it
+            connection = pymysql.connect(
+                host=DB_HOST,
+                port=int(DB_PORT),
+                user=DB_USER,
+                password=DB_PASSWORD,
+                charset='utf8mb4'
+            )
+            
+            with connection.cursor() as cursor:
+                cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_NAME}")
+                print(f"📝 Remote MySQL Database '{DB_NAME}' created or already exists")
+            
+            connection.close()
+            print("✅ Remote MySQL database setup completed!")
+            
+        except Exception as db_error:
+            print(f"⚠️  MySQL database setup warning: {db_error}")
+        
+        with app.app_context():
+            # Create database tables
+            db.create_all()
+            
+            # Add some demo data if no devices exist
+            if not Device.query.first():
+                demo_devices = [
+                    Device(
+                        device_id='ESP32_001',
+                        device_name='Living Room Sensor',
+                        device_type='ESP32',
+                        location='Living Room'
+                    ),
+                    Device(
+                        device_id='PICO_001',
+                        device_name='Kitchen Sensor',
+                        device_type='PICO WH',
+                        location='Kitchen'
+                    ),
+                    Device(
+                        device_id='ESP32_002',
+                        device_name='Bedroom Sensor',
+                        device_type='ESP32',
+                        location='Bedroom'
+                    )
+                ]
+                
+                demo_data = [
+                    SensorData(device_id='ESP32_001', temperature=24.5, humidity=58.2, pressure=1013.25, light=450.0, motion=False),
+                    SensorData(device_id='ESP32_001', temperature=25.1, humidity=59.5, pressure=1012.8, light=470.0, motion=True),
+                    SensorData(device_id='PICO_001', temperature=22.8, humidity=55.0, pressure=1014.2, light=320.0, motion=False),
+                    SensorData(device_id='PICO_001', temperature=23.2, humidity=56.3, pressure=1013.9, light=340.0, motion=False),
+                    SensorData(device_id='ESP32_002', temperature=21.5, humidity=52.1, pressure=1015.1, light=280.0, motion=False),
+                ]
+                
+                for device in demo_devices:
+                    db.session.add(device)
+                
+                for data in demo_data:
+                    db.session.add(data)
+                
+                db.session.commit()
+                print("📝 Demo data created successfully on remote MySQL!")
+            
+        print(f"✅ Remote MySQL Database ({DB_HOST}:{DB_PORT}) connected successfully!")
+        print("🚀 Starting IoT Dashboard on http://localhost:5001")
+        print("📊 Dashboard: http://localhost:5001/dashboard")
+        print("➕ Add Device: http://localhost:5001/devices/add")
+        print("⚙️  Settings: http://localhost:5001/setting")
+        print("")
+        print("🔗 API Endpoints:")
+        print("   POST http://localhost:5001/api/sensor-data - Submit sensor data")
+        print("   GET  http://localhost:5001/api/sensor-data - Retrieve sensor data")
+        print("   GET  http://localhost:5001/api/devices - List devices")
+        print("")
+        print(f"🗄️  Database: MySQL {DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}")
+        print("")
+        
+        app.run(debug=True, host='0.0.0.0', port=5001)
+        
+    except Exception as e:
+        print(f"❌ Failed to connect to remote MySQL database: {e}")
+        print(f"� Please verify MySQL connection details:")
+        print(f"   Host: {DB_HOST}")
+        print(f"   Port: {DB_PORT}")
+        print(f"   User: {DB_USER}")
+        print(f"   Database: {DB_NAME}")
+        print("💡 Application requires remote MySQL database - no local fallback available")
+        import traceback
+        traceback.print_exc()
