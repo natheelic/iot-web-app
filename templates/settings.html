@@ -18,7 +18,7 @@
                 <h5 class="card-title mb-0">
                     <i class="fas fa-microchip me-2"></i>Device Management
                 </h5>
-                <a href="{{ url_for('add_device') }}" class="btn btn-primary btn-sm">
+                <a href="{{ url_for('add_device_page') }}" class="btn btn-primary btn-sm">
                     <i class="fas fa-plus me-1"></i>Add Device
                 </a>
             </div>
@@ -57,7 +57,7 @@
                                 <td>{{ device.created_at.strftime('%Y-%m-%d') }}</td>
                                 <td>
                                     <div class="btn-group btn-group-sm">
-                                        <button class="btn btn-outline-primary" onclick="editDevice({{ device.id }}, '{{ device.device_name }}', '{{ device.location or '' }}', '{{ device.status }}')" title="Edit Device">
+                                        <button class="btn btn-outline-primary" onclick="editDevice({{ device.id }}, '{{ device.device_name }}', '{{ device.location or '' }}', '{{ device.device_type }}')" title="Edit Device">
                                             <i class="fas fa-edit"></i>
                                         </button>
                                         <button class="btn btn-outline-danger" onclick="deleteDevice({{ device.id }}, '{{ device.device_id }}')" title="Delete Device">
@@ -70,7 +70,7 @@
                             <tr>
                                 <td colspan="7" class="text-center text-muted py-4">
                                     No devices registered yet. 
-                                    <a href="{{ url_for('add_device') }}">Add your first device</a>.
+                                    <a href="{{ url_for('add_device_page') }}">Add your first device</a>.
                                 </td>
                             </tr>
                             {% endfor %}
@@ -205,10 +205,14 @@
                         <input type="text" class="form-control" id="edit_location" name="location" placeholder="e.g., Living Room, Office">
                     </div>
                     <div class="mb-3">
-                        <label for="edit_status" class="form-label">Status</label>
-                        <select class="form-select" id="edit_status" name="status">
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
+                        <label for="edit_device_type" class="form-label">Device Type</label>
+                        <select class="form-select" id="edit_device_type" name="device_type">
+                            <option value="ESP32">ESP32</option>
+                            <option value="PICO WH">Raspberry Pi Pico WH</option>
+                            <option value="Arduino">Arduino with WiFi Shield</option>
+                            <option value="NodeMCU">NodeMCU</option>
+                            <option value="ESP8266">ESP8266</option>
+                            <option value="Other">Other</option>
                         </select>
                     </div>
                 </form>
@@ -226,13 +230,13 @@
 <script>
 let currentEditingDeviceId = null;
 
-function editDevice(deviceId, deviceName, location, status) {
+function editDevice(deviceId, deviceName, location, deviceType) {
     currentEditingDeviceId = deviceId;
     
     // Populate the modal form with current device data
     document.getElementById('edit_device_name').value = deviceName;
     document.getElementById('edit_location').value = location || '';
-    document.getElementById('edit_status').value = status;
+    document.getElementById('edit_device_type').value = deviceType;
     
     // Show the modal
     const modal = new bootstrap.Modal(document.getElementById('editDeviceModal'));
@@ -247,7 +251,7 @@ function updateDevice() {
     
     const deviceName = document.getElementById('edit_device_name').value.trim();
     const location = document.getElementById('edit_location').value.trim();
-    const status = document.getElementById('edit_status').value;
+    const deviceType = document.getElementById('edit_device_type').value;
     
     if (!deviceName) {
         showAlert('Device name is required', 'warning');
@@ -257,7 +261,7 @@ function updateDevice() {
     const updateData = {
         device_name: deviceName,
         location: location,
-        status: status
+        device_type: deviceType
     };
     
     // Show loading state

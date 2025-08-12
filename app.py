@@ -34,9 +34,21 @@ class Device(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     device_id = db.Column(db.String(50), unique=True, nullable=False)
     device_name = db.Column(db.String(100), nullable=False)
-    device_type = db.Column(db.String(50), nullable=False)  # ESP32, PICO WH, etc.
+    device_type = db.Column(db.String(50), nullable=False)
     location = db.Column(db.String(100))
-    status = db.Column(db.String(20), default='active')
+    description = db.Column(db.Text)
+    wifi_ssid = db.Column(db.String(100))
+    wifi_security = db.Column(db.String(50))
+    static_ip = db.Column(db.String(15))
+    update_interval = db.Column(db.Integer, default=10)
+    has_temperature = db.Column(db.Boolean, default=False)
+    has_humidity = db.Column(db.Boolean, default=False)
+    has_pressure = db.Column(db.Boolean, default=False)
+    has_light = db.Column(db.Boolean, default=False)
+    has_motion = db.Column(db.Boolean, default=False)
+    has_distance = db.Column(db.Boolean, default=False)
+    is_online = db.Column(db.Boolean, default=False)
+    last_seen = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def to_dict(self):
@@ -46,7 +58,19 @@ class Device(db.Model):
             'device_name': self.device_name,
             'device_type': self.device_type,
             'location': self.location,
-            'status': self.status,
+            'description': self.description,
+            'wifi_ssid': self.wifi_ssid,
+            'wifi_security': self.wifi_security,
+            'static_ip': self.static_ip,
+            'update_interval': self.update_interval,
+            'has_temperature': self.has_temperature,
+            'has_humidity': self.has_humidity,
+            'has_pressure': self.has_pressure,
+            'has_light': self.has_light,
+            'has_motion': self.has_motion,
+            'has_distance': self.has_distance,
+            'is_online': self.is_online,
+            'last_seen': self.last_seen.isoformat() if self.last_seen else None,
             'created_at': self.created_at.isoformat()
         }
 
@@ -81,25 +105,53 @@ def index():
 def dashboard():
     # Get latest sensor data for dashboard
     latest_data = db.session.query(SensorData).order_by(SensorData.timestamp.desc()).limit(10).all()
-    devices = Device.query.filter_by(status='active').all()
+    devices = Device.query.all()
     return render_template('dashboard.html', sensor_data=latest_data, devices=devices)
 
 @app.route('/devices/add')
-def add_device():
+def add_device_page():
     return render_template('add_device.html')
 
-@app.route('/devices', methods=['POST'])
-def create_device():
-    data = request.json
-    device = Device(
-        device_id=data['device_id'],
-        device_name=data['device_name'],
-        device_type=data['device_type'],
-        location=data.get('location', '')
-    )
-    db.session.add(device)
-    db.session.commit()
-    return jsonify({'status': 'success', 'message': 'Device added successfully'})
+@app.route('/api/devices', methods=['POST'])
+def add_device_api():
+    try:
+        data = request.json
+        
+        # Check if device already exists
+        existing_device = Device.query.filter_by(device_id=data['device_id']).first()
+        if existing_device:
+            return jsonify({'error': 'Device ID already exists'}), 400
+        
+        # Create new device with all configuration
+        new_device = Device(
+            device_id=data['device_id'],
+            device_name=data['device_name'],
+            device_type=data['device_type'],
+            location=data.get('location', ''),
+            description=data.get('description', ''),
+            wifi_ssid=data.get('wifi_ssid', ''),
+            wifi_security=data.get('wifi_security', 'WPA2'),
+            static_ip=data.get('static_ip', ''),
+            update_interval=int(data.get('update_interval', 10)),
+            has_temperature=data.get('has_temperature', False),
+            has_humidity=data.get('has_humidity', False),
+            has_pressure=data.get('has_pressure', False),
+            has_light=data.get('has_light', False),
+            has_motion=data.get('has_motion', False),
+            has_distance=data.get('has_distance', False)
+        )
+        
+        db.session.add(new_device)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Device added successfully',
+            'device_id': new_device.device_id
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/setting')
 def settings():
@@ -152,13 +204,28 @@ def update_device(device_id):
         device = Device.query.get_or_404(device_id)
         data = request.json
         
+        # Update device fields
         device.device_name = data.get('device_name', device.device_name)
+        device.device_type = data.get('device_type', device.device_type)
         device.location = data.get('location', device.location)
-        device.status = data.get('status', device.status)
+        device.description = data.get('description', device.description)
+        device.wifi_ssid = data.get('wifi_ssid', device.wifi_ssid)
+        device.wifi_security = data.get('wifi_security', device.wifi_security)
+        device.static_ip = data.get('static_ip', device.static_ip)
+        device.update_interval = int(data.get('update_interval', device.update_interval))
+        
+        # Update sensor capabilities
+        device.has_temperature = data.get('has_temperature', device.has_temperature)
+        device.has_humidity = data.get('has_humidity', device.has_humidity)
+        device.has_pressure = data.get('has_pressure', device.has_pressure)
+        device.has_light = data.get('has_light', device.has_light)
+        device.has_motion = data.get('has_motion', device.has_motion)
+        device.has_distance = data.get('has_distance', device.has_distance)
         
         db.session.commit()
         return jsonify({'status': 'success', 'message': 'Device updated successfully'})
     except Exception as e:
+        db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 400
 
 @app.route('/api/devices/<int:device_id>', methods=['DELETE'])
@@ -213,6 +280,10 @@ if __name__ == '__main__':
         
         # Create tables and add demo data
         with app.app_context():
+            # Drop all tables and recreate with new schema
+            db.drop_all()
+            print("🔄 Dropped existing tables to update schema")
+            
             db.create_all()
             print("✅ Database tables created successfully")
             
@@ -223,19 +294,37 @@ if __name__ == '__main__':
                         device_id='ESP32_001',
                         device_name='Living Room Sensor',
                         device_type='ESP32',
-                        location='Living Room'
+                        location='Living Room',
+                        description='Temperature and humidity monitoring',
+                        wifi_ssid='MyWiFi',
+                        wifi_security='WPA2',
+                        update_interval=30,
+                        has_temperature=True,
+                        has_humidity=True
                     ),
                     Device(
                         device_id='PICO_001',
                         device_name='Kitchen Sensor',
                         device_type='PICO WH',
-                        location='Kitchen'
+                        location='Kitchen',
+                        description='Motion detection and light monitoring',
+                        wifi_ssid='MyWiFi', 
+                        wifi_security='WPA2',
+                        update_interval=15,
+                        has_motion=True,
+                        has_light=True
                     ),
                     Device(
                         device_id='ESP32_002',
                         device_name='Bedroom Sensor',
                         device_type='ESP32',
-                        location='Bedroom'
+                        location='Bedroom',
+                        description='Environmental monitoring',
+                        wifi_ssid='MyWiFi',
+                        wifi_security='WPA2',
+                        update_interval=60,
+                        has_temperature=True,
+                        has_pressure=True
                     )
                 ]
                 
